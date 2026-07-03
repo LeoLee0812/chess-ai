@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>国际象棋 AI 对弈</title>
+<style>
+  /* ========== 主题变量：默认跟随系统深色/浅色 ========== */
+  :root {
+    color-scheme: light dark;
+    --bg: #f3ede3;
+    --panel-bg: #ffffff;
+    --panel-border: #ddd2bd;
+    --text: #2b241c;
+    --text-dim: #7a6f5d;
+    --accent: #8b5a2b;
+    --accent-2: #b07a3e;
+    --board-light: #f0d9b5;
+    --board-dark: #b58863;
+    --board-border: #5c3d1e;
+    --sel-ring: #4c9be8;
+    --legal-dot: rgba(30, 120, 40, 0.55);
+    --legal-capture: rgba(200, 40, 40, 0.55);
+    --last-move: rgba(246, 199, 66, 0.55);
+    --check-glow: rgba(220, 40, 40, 0.65);
+    --btn-bg: #8b5a2b;
+    --btn-bg-hover: #a3703c;
+    --btn-text: #fff;
+    --input-bg: #fff;
+    --shadow: 0 6px 18px rgba(0,0,0,0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1a17;
+      --panel-bg: #262320;
+      --panel-border: #3a352d;
+      --text: #ecE4d6;
+      --text-dim: #a89a82;
+      --accent: #d0975a;
+      --accent-2: #e0ab72;
+      --board-light: #ead9b8;
+      --board-dark: #7a5333;
+      --board-border: #14100b;
+      --sel-ring: #5cb3ff;
+      --legal-dot: rgba(90, 220, 110, 0.55);
+      --legal-capture: rgba(255, 90, 90, 0.6);
+      --last-move: rgba(246, 199, 66, 0.45);
+      --check-glow: rgba(255, 70, 70, 0.75);
+      --btn-bg: #a3703c;
+      --btn-bg-hover: #c08a4c;
+      --btn-text: #1c1a17;
+      --input-bg: #322d27;
+      --shadow: 0 6px 22px rgba(0,0,0,0.5);
+    }
+  }
+  /* 手动主题覆盖（如果外部脚手架设置了 data-theme）
+     修复：此前浅色/深色覆盖块只覆盖了少数变量，导致与对应的默认/媒体查询变量集
+     不一致而出现混搭配色。现在覆盖块与各自的完整变量集保持一一对应。 */
+  :root[data-theme="light"] {
+    --bg: #f3ede3;
+    --panel-bg: #ffffff;
+    --panel-border: #ddd2bd;
+    --text: #2b241c;
+    --text-dim: #7a6f5d;
+    --accent: #8b5a2b;
+    --accent-2: #b07a3e;
+    --board-light: #f0d9b5;
+    --board-dark: #b58863;
+    --board-border: #5c3d1e;
+    --sel-ring: #4c9be8;
+    --legal-dot: rgba(30, 120, 40, 0.55);
+    --legal-capture: rgba(200, 40, 40, 0.55);
+    --last-move: rgba(246, 199, 66, 0.55);
+    --check-glow: rgba(220, 40, 40, 0.65);
+    --btn-bg: #8b5a2b;
+    --btn-bg-hover: #a3703c;
+    --btn-text: #fff;
+    --input-bg: #fff;
+    --shadow: 0 6px 18px rgba(0,0,0,0.12);
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1a17;
+    --panel-bg: #262320;
+    --panel-border: #3a352d;
+    --text: #ecE4d6;
+    --text-dim: #a89a82;
+    --accent: #d0975a;
+    --accent-2: #e0ab72;
+    --board-light: #ead9b8;
+    --board-dark: #7a5333;
+    --board-border: #14100b;
+    --sel-ring: #5cb3ff;
+    --legal-dot: rgba(90, 220, 110, 0.55);
+    --legal-capture: rgba(255, 90, 90, 0.6);
+    --last-move: rgba(246, 199, 66, 0.45);
+    --check-glow: rgba(255, 70, 70, 0.75);
+    --btn-bg: #a3703c;
+    --btn-bg-hover: #c08a4c;
+    --btn-text: #1c1a17;
+    --input-bg: #322d27;
+    --shadow: 0 6px 22px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100%;
+  }
+  body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  header {
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 1.6rem;
+    letter-spacing: 1px;
+  }
+  header p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+
+  #app {
+    width: 100%;
+    max-width: 1080px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  /* ========== 棋盘区域 ========== */
+  #board-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  #board-frame {
+    padding: 14px;
+    background: linear-gradient(155deg, var(--board-border), #000 130%);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, min(11vw, 62px));
+    grid-template-rows: repeat(8, min(11vw, 62px));
+    border: 3px solid var(--board-border);
+    border-radius: 4px;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .square {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: min(8vw, 44px);
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .square.light { background-color: var(--board-light); }
+  .square.dark  { background-color: var(--board-dark); }
+  .square .piece {
+    pointer-events: none;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.35));
+    transition: transform 0.08s ease;
+  }
+  .square.selected::after {
+    content: "";
+    position: absolute; inset: 3px;
+    border: 3px solid var(--sel-ring);
+    border-radius: 6px;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  .square.last-move { background-image: linear-gradient(var(--last-move), var(--last-move)); }
+  .square.in-check { box-shadow: inset 0 0 0 4px var(--check-glow), inset 0 0 22px 4px var(--check-glow); animation: checkPulse 1s ease-in-out infinite; }
+  @keyframes checkPulse {
+    0%, 100% { box-shadow: inset 0 0 0 4px var(--check-glow), inset 0 0 14px 2px var(--check-glow); }
+    50% { box-shadow: inset 0 0 0 4px var(--check-glow), inset 0 0 26px 8px var(--check-glow); }
+  }
+  .square .legal-dot {
+    position: absolute;
+    width: 28%; height: 28%;
+    border-radius: 50%;
+    background: var(--legal-dot);
+    pointer-events: none;
+  }
+  .square .legal-capture-ring {
+    position: absolute; inset: 6%;
+    border-radius: 50%;
+    border: 4px solid var(--legal-capture);
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  .square:hover:not(.disabled) { filter: brightness(1.06); }
+
+  #files-row, .ranks-col {
+    display: flex;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+  }
+
+  /* ========== 侧边面板 ========== */
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    width: 100%;
+  }
+  #sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 320px;
+    max-width: 100%;
+  }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 0.95rem;
+    color: var(--accent);
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 6px;
+  }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .row label { color: var(--text-dim); font-size: 0.85rem; }
+  select, button {
+    font-family: inherit;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border);
+    padding: 6px 10px;
+    background: var(--input-bg);
+    color: var(--text);
+  }
+  button {
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.15s ease, transform 0.05s ease;
+  }
+  button:hover:not(:disabled) { background: var(--btn-bg-hover); }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 8px; margin-top: 4px; }
+  .btn-row button { flex: 1; }
+
+  #status-banner {
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-dim);
+    min-height: 1.4em;
+  }
+  #status-banner.check { color: #fff; background: #c62828; }
+  #status-banner.mate { color: #fff; background: #7b1fa2; }
+  #status-banner.draw { color: #fff; background: #546e7a; }
+  #status-banner.think { color: var(--accent); background: transparent; }
+
+  #eval-line {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+  #eval-score { font-weight: 700; color: var(--text); }
+
+  #fen-box {
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 0.72rem;
+    word-break: break-all;
+    background: var(--input-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 8px;
+    color: var(--text-dim);
+  }
+
+  #history-box {
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+  }
+  #history-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #history-table td {
+    padding: 2px 4px;
+    border-bottom: 1px dashed var(--panel-border);
+  }
+  #history-table td:first-child {
+    color: var(--text-dim);
+    width: 2.4em;
+  }
+
+  #engine-warning {
+    display: none;
+    background: #c62828;
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    max-width: 640px;
+    text-align: center;
+  }
+
+  /* ========== 升变选择弹层 ========== */
+  #promo-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  #promo-box {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    gap: 10px;
+    box-shadow: var(--shadow);
+  }
+  #promo-box button {
+    font-size: 2rem;
+    width: 60px; height: 60px;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+  }
+  #promo-box button:hover { background: var(--board-light); }
+
+  footer {
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    margin-top: 8px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>♟ 国际象棋 AI 对弈</h1>
+  <p>纯前端 JavaScript 引擎 · 玩家执子 vs 引擎搜索</p>
+</header>
+
+<div id="engine-warning">
+  未检测到 engine.js，请确认它与 index.html 位于同一目录下，并通过 HTTP 服务或本地文件方式打开本页面。
+</div>
+
+<div id="app">
+  <div id="board-wrap">
+    <div id="board-frame">
+      <div id="board"></div>
+    </div>
+    <div id="status-banner"></div>
+  </div>
+
+  <div id="sidebar">
+    <div class="panel" id="setup-panel">
+      <h2>对局设置</h2>
+      <div class="row">
+        <label for="side-select">我执子颜色</label>
+        <select id="side-select">
+          <option value="w" selected>白方（先手）</option>
+          <option value="b">黑方（后手）</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="time-select">引擎思考时间</label>
+        <select id="time-select">
+          <option value="500">0.5 秒</option>
+          <option value="1000" selected>1 秒</option>
+          <option value="3000">3 秒</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button id="btn-new">新局</button>
+        <button id="btn-undo">悔棋</button>
+      </div>
+    </div>
+
+    <div class="panel" id="eval-panel">
+      <h2>引擎信息</h2>
+      <div id="eval-line">
+        <span>评分（白方视角）</span>
+        <span id="eval-score">—</span>
+      </div>
+      <div id="eval-line2" class="row" style="margin-top:2px;">
+        <span>搜索深度 / 节点</span>
+        <span id="eval-depth-nodes">—</span>
+      </div>
+    </div>
+
+    <div class="panel" id="history-panel">
+      <h2>着法历史（SAN）</h2>
+      <div id="history-box">
+        <table id="history-table"><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="panel" id="fen-panel">
+      <h2>当前局面 FEN</h2>
+      <div id="fen-box">—</div>
+    </div>
+  </div>
+</div>
+
+<footer>引擎在 Web Worker 中运行；file:// 环境下自动降级为主线程异步执行</footer>
+
+<div id="promo-overlay">
+  <div id="promo-box"></div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+/* =========================================================================
+ * 国际象棋对弈 UI
+ * 仅依赖 SPEC.md 中约定的 ChessEngine 公开接口：
+ *   new ChessEngine.Game() / loadFEN / getFEN / turn / legalMoves / move /
+ *   undo / isCheck / isCheckmate / isStalemate / isDraw / gameOver /
+ *   perft / search / history
+ * ========================================================================= */
+
+(function () {
+  'use strict';
+
+  // ----------------------------- 常量与状态 -----------------------------
+  const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const UNICODE_PIECES = {
+    K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙',
+    k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟',
+  };
+
+  const boardEl = document.getElementById('board');
+  const statusBannerEl = document.getElementById('status-banner');
+  const evalScoreEl = document.getElementById('eval-score');
+  const evalDepthNodesEl = document.getElementById('eval-depth-nodes');
+  const fenBoxEl = document.getElementById('fen-box');
+  const historyTableBody = document.querySelector('#history-table tbody');
+  const engineWarningEl = document.getElementById('engine-warning');
+  const sideSelectEl = document.getElementById('side-select');
+  const timeSelectEl = document.getElementById('time-select');
+  const btnNewEl = document.getElementById('btn-new');
+  const btnUndoEl = document.getElementById('btn-undo');
+  const promoOverlayEl = document.getElementById('promo-overlay');
+  const promoBoxEl = document.getElementById('promo-box');
+
+  let game = null;              // ChessEngine.Game 实例
+  let playerColor = 'w';        // 玩家执子颜色
+  let thinkMs = 1000;           // 引擎思考时长（毫秒）
+  let selectedSquare = null;    // 当前选中格
+  let legalFromSelected = [];   // 选中格对应的合法着法列表
+  let lastMove = null;          // 最近一步 {from, to}
+  let isThinking = false;       // 引擎是否正在思考
+  let flipped = false;          // 棋盘是否翻转（玩家执黑时翻转）
+  let engineErrorMsg = null;    // 引擎出错提示（优先于普通状态显示）
+
+  // ----------------------------- FEN 解析（仅用于渲染） -----------------------------
+  function parseFEN(fen) {
+    const parts = fen.trim().split(/\s+/);
+    const rows = parts[0].split('/');
+    const board = []; // board[0] = 第8行 ... board[7] = 第1行
+    for (const rowStr of rows) {
+      const row = [];
+      for (const ch of rowStr) {
+        if (/\d/.test(ch)) {
+          for (let i = 0; i < Number(ch); i++) row.push(null);
+        } else {
+          row.push(ch);
+        }
+      }
+      board.push(row);
+    }
+    return {
+      board,
+      turn: parts[1] || 'w',
+    };
+  }
+
+  function pieceAt(parsed, square) {
+    const file = FILES.indexOf(square[0]);
+    const rank = Number(square[1]);
+    const rowIdx = 8 - rank; // 第8行对应 rowIdx 0
+    return parsed.board[rowIdx][file];
+  }
+
+  function findKingSquare(parsed, color) {
+    const target = color === 'w' ? 'K' : 'k';
+    for (let rowIdx = 0; rowIdx < 8; rowIdx++) {
+      for (let file = 0; file < 8; file++) {
+        if (parsed.board[rowIdx][file] === target) {
+          const rank = 8 - rowIdx;
+          return FILES[file] + rank;
+        }
+      }
+    }
+    return null;
+  }
+
+  // ----------------------------- 引擎运行器（Worker + 主线程降级） -----------------------------
+  let worker = null;
+  let useWorker = false;
+  let requestSeq = 0;
+  let pendingRequests = new Map(); // id -> { resolve, reject }，用于 worker 出错时统一 settle
+
+  async function initEngineRunner() {
+    if (typeof window.ChessEngine === 'undefined') {
+      engineWarningEl.style.display = 'block';
+      return;
+    }
+    try {
+      const resp = await fetch('engine.js');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const engineSource = await resp.text();
+      // 拼接一段 worker 驱动代码：接收 FEN + 思考时间，回传搜索结果
+      const driverCode = `
+        self.onmessage = function (e) {
+          const { fen, timeMs, id } = e.data;
+          try {
+            const Engine = (typeof ChessEngine !== 'undefined') ? ChessEngine : self.ChessEngine;
+            if (!Engine) throw new Error('Worker 中未找到 ChessEngine，engine.js 可能未正确导出');
+            const g = new Engine.Game();
+            g.loadFEN(fen);
+            const result = g.search({ timeMs: timeMs });
+            self.postMessage({ id: id, ok: true, result: result });
+          } catch (err) {
+            self.postMessage({ id: id, ok: false, error: String((err && err.message) || err) });
+          }
+        };
+      `;
+      const blob = new Blob([engineSource, '\n;\n', driverCode], { type: 'application/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+      worker = new Worker(blobUrl);
+      worker.onmessage = function (e) {
+        const { id, ok, result, error } = e.data;
+        const pending = pendingRequests.get(id);
+        if (!pending) return;
+        pendingRequests.delete(id);
+        if (ok) pending.resolve(result);
+        else pending.reject(new Error(error));
+      };
+      worker.onerror = function (err) {
+        console.warn('Worker 运行出错，降级为主线程模式：', err.message);
+        useWorker = false;
+        // 修复：Worker 运行期报错时，之前挂起的搜索 Promise 永远不会 settle，
+        // 会导致 UI 卡在"引擎思考中"。这里统一 reject 所有挂起的请求，
+        // 由调用方（maybeTriggerEngineMove）的 catch 分支负责收尾。
+        const workerErr = new Error('Worker 运行出错：' + ((err && err.message) || String(err)));
+        for (const [id, pending] of pendingRequests) {
+          pendingRequests.delete(id);
+          pending.reject(workerErr);
+        }
+      };
+      useWorker = true;
+      console.info('引擎已加载到 Web Worker 中运行。');
+    } catch (err) {
+      console.warn('无法通过 fetch 加载 engine.js（可能处于 file:// 环境），降级为主线程异步执行：', err);
+      useWorker = false;
+    }
+  }
+
+  /**
+   * 让引擎搜索一次，返回 Promise<{move, score, depth, nodes}>
+   */
+  function runEngineSearch(fen, timeMs) {
+    return new Promise((resolve, reject) => {
+      if (useWorker && worker) {
+        const id = ++requestSeq;
+        pendingRequests.set(id, { resolve, reject });
+        worker.postMessage({ fen, timeMs, id });
+      } else {
+        // 主线程降级：先用 setTimeout 让出一帧，保证“思考中”状态能先渲染出来，
+        // 之后引擎自身应在 timeMs 内完成搜索并返回，不会超出所选思考时间太多。
+        setTimeout(() => {
+          try {
+            const g = new window.ChessEngine.Game();
+            g.loadFEN(fen);
+            const result = g.search({ timeMs });
+            resolve(result);
+          } catch (err) {
+            reject(err);
+          }
+        }, 30);
+      }
+    });
+  }
+
+  // ----------------------------- 游戏生命周期 -----------------------------
+  function newGame() {
+    if (typeof window.ChessEngine === 'undefined') {
+      engineWarningEl.style.display = 'block';
+      return;
+    }
+    game = new window.ChessEngine.Game();
+    playerColor = sideSelectEl.value;
+    thinkMs = Number(timeSelectEl.value);
+    flipped = (playerColor === 'b');
+    selectedSquare = null;
+    legalFromSelected = [];
+    lastMove = null;
+    isThinking = false;
+    engineErrorMsg = null;
+    render();
+    maybeTriggerEngineMove();
+  }
+
+  function isPlayerTurn() {
+    return game && !isThinking && game.turn() === playerColor && !game.gameOver();
+  }
+
+  function maybeTriggerEngineMove() {
+    if (!game || game.gameOver()) return;
+    if (game.turn() === playerColor) return; // 轮到玩家，不出手
+    isThinking = true;
+    engineErrorMsg = null; // 开始新一轮思考时清除上一次的出错提示
+    render();
+    const fen = game.getFEN();
+    runEngineSearch(fen, thinkMs)
+      .then((result) => {
+        if (!result || !result.move) throw new Error('引擎未返回可用着法');
+        const applied = game.move(result.move);
+        if (!applied) throw new Error('引擎返回了非法着法');
+        lastMove = { from: result.move.from, to: result.move.to };
+        updateEvalDisplay(result, game.turn() === playerColor ? 'b' === playerColor ? 'w' : 'b' : null);
+        isThinking = false;
+        render();
+        maybeTriggerEngineMove(); // 理论上此时应轮到玩家；防御性检查
+      })
+      .catch((err) => {
+        console.error('引擎思考出错：', err);
+        // 修复：直接写 statusBannerEl 会被随后的 render() -> renderStatus() 覆盖，
+        // 导致错误提示一闪而过。这里改为记录到 engineErrorMsg，由 renderStatus
+        // 优先展示；同时必须复位 isThinking，否则 UI 会永久卡在"思考中"。
+        isThinking = false;
+        engineErrorMsg = '引擎出错：' + ((err && err.message) || String(err));
+        render();
+      });
+  }
+
+  function updateEvalDisplay(result, engineColorHint) {
+    if (!result) return;
+    // search 的 score 是"走棋方视角"，我们统一换算成白方视角展示，便于直觉理解。
+    // 走棋方 = 触发本次 search 时的 game.turn()，此处用刚走完棋前的颜色，即非 playerColor 一方（引擎）
+    const engineColor = engineColorHint || (playerColor === 'w' ? 'b' : 'w');
+    const raw = typeof result.score === 'number' ? result.score : null;
+    if (raw === null) {
+      evalScoreEl.textContent = '—';
+    } else {
+      const whiteScore = engineColor === 'w' ? raw : -raw;
+      const MATE_BASE = 100000;
+      if (Math.abs(raw) > MATE_BASE - 1000) {
+        const ply = MATE_BASE - Math.abs(raw);
+        const movesToMate = Math.max(1, Math.ceil(ply / 2));
+        const sign = whiteScore > 0 ? '+' : '-';
+        evalScoreEl.textContent = `${sign}M${movesToMate}`;
+      } else {
+        const pawns = (whiteScore / 100).toFixed(2);
+        evalScoreEl.textContent = (whiteScore >= 0 ? '+' : '') + pawns;
+      }
+    }
+    evalDepthNodesEl.textContent =
+      (result.depth != null ? '深度 ' + result.depth : '深度 —') +
+      ' / ' +
+      (result.nodes != null ? result.nodes.toLocaleString('zh-CN') + ' 节点' : '—');
+  }
+
+  // ----------------------------- 玩家交互 -----------------------------
+  function onSquareClick(square) {
+    if (!game || !isPlayerTurn()) return;
+
+    const fen = game.getFEN();
+    const parsed = parseFEN(fen);
+    const piece = pieceAt(parsed, square);
+    const isOwnPiece = piece && (playerColor === 'w' ? piece === piece.toUpperCase() : piece === piece.toLowerCase());
+
+    if (selectedSquare) {
+      const candidates = legalFromSelected.filter((m) => m.to === square);
+      if (candidates.length > 0) {
+        if (candidates.length > 1 || candidates[0].promotion) {
+          // 需要升变选择
+          openPromotionChooser(candidates, (chosen) => {
+            applyPlayerMove(chosen);
+          });
+        } else {
+          applyPlayerMove(candidates[0]);
+        }
+        return;
+      }
+      if (isOwnPiece) {
+        selectSquare(square);
+        return;
+      }
+      selectedSquare = null;
+      legalFromSelected = [];
+      render();
+      return;
+    }
+
+    if (isOwnPiece) {
+      selectSquare(square);
+    }
+  }
+
+  function selectSquare(square) {
+    selectedSquare = square;
+    const all = game.legalMoves();
+    legalFromSelected = all.filter((m) => m.from === square);
+    render();
+  }
+
+  function applyPlayerMove(moveSpec) {
+    const applied = game.move({ from: moveSpec.from, to: moveSpec.to, promotion: moveSpec.promotion });
+    if (!applied) {
+      console.error('非法着法被拒绝：', moveSpec);
+      selectedSquare = null;
+      legalFromSelected = [];
+      render();
+      return;
+    }
+    lastMove = { from: moveSpec.from, to: moveSpec.to };
+    selectedSquare = null;
+    legalFromSelected = [];
+    render();
+    maybeTriggerEngineMove();
+  }
+
+  function openPromotionChooser(candidates, onChoose) {
+    const color = playerColor;
+    const order = ['q', 'r', 'b', 'n'];
+    promoBoxEl.innerHTML = '';
+    order.forEach((p) => {
+      const c = candidates.find((m) => m.promotion === p) || candidates[0];
+      const btn = document.createElement('button');
+      const glyph = color === 'w' ? UNICODE_PIECES[p.toUpperCase()] : UNICODE_PIECES[p];
+      btn.textContent = glyph;
+      btn.title = { q: '后', r: '车', b: '象', n: '马' }[p];
+      btn.onclick = () => {
+        promoOverlayEl.style.display = 'none';
+        onChoose({ from: c.from, to: c.to, promotion: p });
+      };
+      promoBoxEl.appendChild(btn);
+    });
+    promoOverlayEl.style.display = 'flex';
+  }
+
+  // 修复：升变弹层此前没有取消入口，一旦弹出就必须完成选择。
+  // 现在支持点击遮罩背景或按 Esc 关闭弹层并取消本次走子；
+  // 由于走子在这一步还未真正提交（game.move 尚未调用），
+  // 关闭弹层并重新渲染即可恢复到"已选中棋子、等待落点"的状态。
+  function closePromotionChooser() {
+    if (promoOverlayEl.style.display === 'none') return;
+    promoOverlayEl.style.display = 'none';
+    promoBoxEl.innerHTML = '';
+    render();
+  }
+  promoOverlayEl.addEventListener('click', (e) => {
+    if (e.target === promoOverlayEl) {
+      closePromotionChooser();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && promoOverlayEl.style.display === 'flex') {
+      closePromotionChooser();
+    }
+  });
+
+  function undoMove() {
+    if (!game || isThinking) return;
+    // 一次悔棋撤销双方各一步（如果历史不足两步，则尽力撤销）
+    if (game.history().length === 0) return;
+    game.undo();
+    if (game.history().length > 0) game.undo();
+    selectedSquare = null;
+    legalFromSelected = [];
+    lastMove = null;
+    statusBannerEl.className = '';
+    engineErrorMsg = null;
+    render();
+    // 修复：悔棋后如果轮到引擎一方且对局未结束，需要重新触发引擎走子，
+    // 否则棋盘会因为既不等玩家操作、也没有引擎在思考而永久冻结。
+    if (game && !game.gameOver() && game.turn() !== playerColor) {
+      maybeTriggerEngineMove();
+    }
+  }
+
+  // ----------------------------- 渲染 -----------------------------
+  function squareColorClass(fileIdx, rankNum) {
+    // 标准棋盘 a1 应为深色格：a1 的 fileIdx=0、rankNum=1，(file+rank) 为奇数，
+    // 因此 (file+rank) 为奇数时是深色格，偶数时是浅色格。
+    return (fileIdx + rankNum) % 2 === 0 ? 'light' : 'dark';
+  }
+
+  function render() {
+    if (!game) return;
+    const fen = game.getFEN();
+    const parsed = parseFEN(fen);
+
+    boardEl.innerHTML = '';
+
+    const displayFiles = flipped ? [...FILES].reverse() : FILES;
+    const displayRanks = flipped ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1];
+
+    const checkKingSquare = game.isCheck() ? findKingSquare(parsed, game.turn()) : null;
+
+    const legalTargetSquares = new Set(legalFromSelected.map((m) => m.to));
+
+    for (const rank of displayRanks) {
+      for (const file of displayFiles) {
+        const square = file + rank;
+        const fileIdx = FILES.indexOf(file);
+        const div = document.createElement('div');
+        div.className = 'square ' + squareColorClass(fileIdx, rank);
+        div.dataset.square = square;
+
+        if (lastMove && (square === lastMove.from || square === lastMove.to)) {
+          div.classList.add('last-move');
+        }
+        if (selectedSquare === square) {
+          div.classList.add('selected');
+        }
+        if (checkKingSquare && square === checkKingSquare) {
+          div.classList.add('in-check');
+        }
+
+        const piece = pieceAt(parsed, square);
+        if (piece) {
+          const span = document.createElement('span');
+          span.className = 'piece';
+          span.textContent = UNICODE_PIECES[piece] || '';
+          div.appendChild(span);
+        }
+
+        if (legalTargetSquares.has(square)) {
+          const marker = document.createElement('div');
+          marker.className = piece ? 'legal-capture-ring' : 'legal-dot';
+          div.appendChild(marker);
+        }
+
+        div.addEventListener('click', () => onSquareClick(square));
+        boardEl.appendChild(div);
+      }
+    }
+
+    fenBoxEl.textContent = fen;
+    renderHistory();
+    renderStatus();
+
+    btnUndoEl.disabled = isThinking || (game.history().length === 0);
+  }
+
+  function renderHistory() {
+    const sanList = game.history();
+    historyTableBody.innerHTML = '';
+    for (let i = 0; i < sanList.length; i += 2) {
+      const tr = document.createElement('tr');
+      const moveNo = Math.floor(i / 2) + 1;
+      const whiteSan = sanList[i] || '';
+      const blackSan = sanList[i + 1] || '';
+      tr.innerHTML = `<td>${moveNo}.</td><td>${whiteSan}</td><td>${blackSan}</td>`;
+      historyTableBody.appendChild(tr);
+    }
+    const box = document.getElementById('history-box');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function renderStatus() {
+    statusBannerEl.className = '';
+    if (engineErrorMsg) {
+      statusBannerEl.textContent = engineErrorMsg;
+      statusBannerEl.classList.add('check');
+      return;
+    }
+    if (isThinking) {
+      statusBannerEl.textContent = '引擎思考中…';
+      statusBannerEl.classList.add('think');
+      return;
+    }
+    if (game.isCheckmate()) {
+      const winner = game.turn() === 'w' ? '黑方' : '白方';
+      statusBannerEl.textContent = `将死！${winner} 获胜`;
+      statusBannerEl.classList.add('mate');
+      return;
+    }
+    if (game.isStalemate()) {
+      statusBannerEl.textContent = '和棋（逼和 / 无子可动）';
+      statusBannerEl.classList.add('draw');
+      return;
+    }
+    if (game.isDraw()) {
+      statusBannerEl.textContent = '和棋（五十步 / 三次重复 / 子力不足）';
+      statusBannerEl.classList.add('draw');
+      return;
+    }
+    if (game.isCheck()) {
+      const who = game.turn() === 'w' ? '白方' : '黑方';
+      statusBannerEl.textContent = `将军！${who}正被将军`;
+      statusBannerEl.classList.add('check');
+      return;
+    }
+    const who = game.turn() === playerColor ? '轮到你走棋' : '等待引擎走棋';
+    statusBannerEl.textContent = who;
+  }
+
+  // ----------------------------- 事件绑定 -----------------------------
+  btnNewEl.addEventListener('click', newGame);
+  btnUndoEl.addEventListener('click', undoMove);
+  sideSelectEl.addEventListener('change', () => { /* 需点击新局才生效 */ });
+  timeSelectEl.addEventListener('change', () => { thinkMs = Number(timeSelectEl.value); });
+
+  // ----------------------------- 启动 -----------------------------
+  (async function bootstrap() {
+    await initEngineRunner();
+    newGame();
+  })();
+})();
+</script>
+</body>
+</html>
